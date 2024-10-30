@@ -29,46 +29,28 @@ ICP::ICP(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
 
 void ICP::callback(const sensor_msgs::PointCloud2ConstPtr &msgCloud){
 
-    // ROS_INFO("Recived pointcloud. Passthrough");
     PCLPointCloud::Ptr pclCloudRaw(new PCLPointCloud);
     PCLPointCloud::Ptr pclCloudTransformed(new PCLPointCloud);
+
     pcl::fromROSMsg(*msgCloud, *pclCloudRaw);
     bool ICM_status = this->applyICM(pclCloudRaw, pclCloudTransformed); // Test 
-    // ROS_INFO("ICM transformation was %d", ICM_status);
-    // *pclCloudTransformed = *pclCloudRaw;
-
-    // Publish transformed pointcloud
 
     sensor_msgs::PointCloud2 msgTransformedCloud;
     pcl::toROSMsg(*pclCloudTransformed, msgTransformedCloud);
+
     this->pub_cloud_transform_.publish(msgTransformedCloud);
-    this->pub_cloud_original_.publish(msgCloud); // publish the original at the same time to compare (because of delay)
+    this->pub_cloud_original_.publish(msgCloud); // Publish the original pointcloud at the same time to compare (because of delay)
 }
-
-void print4x4Matrix(const Eigen::Matrix4d &matrix){
-    ROS_INFO("Rotation matrix :\n");
-    ROS_INFO("    | %6.3f %6.3f %6.3f | \n", matrix(0, 0), matrix(0, 1), matrix(0, 2));
-    ROS_INFO("R = | %6.3f %6.3f %6.3f | \n", matrix(1, 0), matrix(1, 1), matrix(1, 2));
-    ROS_INFO("    | %6.3f %6.3f %6.3f | \n", matrix(2, 0), matrix(2, 1), matrix(2, 2));
-    ROS_INFO("Translation vector :\n");
-    ROS_INFO("t = < %6.3f, %6.3f, %6.3f >\n\n", matrix(0, 3), matrix(1, 3), matrix(2, 3));
-}
-
 
 // Execute ICP algorithm
 bool ICP::applyICM(PCLPointCloud::Ptr &pclCloudIn, PCLPointCloud::Ptr &pclCloudOut){
 
     pcl:pcl::console::TicToc time;
 
-    // PCLPointCloud::Ptr pclCloudTr(new PCLPointCloud);
-
-    // pcl::PCLPointCloud2::Ptr pclCloudTr (new pcl::PCLPointCloud2());
-    // pcl::PCLPointCloud2::Ptr pclCloudOut (new pcl::PCLPointCloud2());
-
     // Transformation matrix
     Eigen::Matrix4d transformationMatrix = Eigen::Matrix4d::Identity();
     // Rotation
-    double theta = M_PI / 8; // angle of rotation
+    double theta = M_PI / 4; // angle of rotation
     transformationMatrix(0,0) = std::cos(theta);
     transformationMatrix(0,1) = -std::sin(theta);
     transformationMatrix(1,0) = std::sin(theta);
@@ -79,16 +61,18 @@ bool ICP::applyICM(PCLPointCloud::Ptr &pclCloudIn, PCLPointCloud::Ptr &pclCloudO
     // transformationMatrix(2,3) = 0.4; // z
 
     pcl::transformPointCloud(*pclCloudIn, *pclCloudOut, transformationMatrix);
-    // print4x4Matrix(transformationMatrix);
-    // *pclCloudTr = *pclCloudOut;
 
     int iterations = 1;
+
     time.tic();
     pcl::IterativeClosestPoint<PCLPoint, PCLPoint> icp;
     icp.setMaximumIterations(iterations);
+
     icp.setInputSource(pclCloudOut);
     icp.setInputTarget(pclCloudIn);
+
     icp.align(*pclCloudOut);
+
     ROS_INFO("Applied %d iterations, elapsed time: %.2f", iterations ,time.toc());
 
     if (icp.hasConverged()){
