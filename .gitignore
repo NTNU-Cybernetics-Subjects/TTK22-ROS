@@ -3,4 +3,5 @@
 **/devel/**
 **/bags/**
 **/.*
+*/src/CMakeLists.txt
 !.gitignore
