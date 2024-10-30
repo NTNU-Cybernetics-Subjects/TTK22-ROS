@@ -26,9 +26,6 @@ class ICP {
     ros::Subscriber sub_;
     ros::Publisher pub_cloud_transform_;
     ros::Publisher pub_cloud_original_;
-
-
-
 };
 
 
