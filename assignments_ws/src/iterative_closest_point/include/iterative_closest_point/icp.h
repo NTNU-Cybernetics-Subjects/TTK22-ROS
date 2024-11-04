@@ -16,7 +16,7 @@ class ICP {
 
     public:
     ICP(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private);
-    bool applyICM(PCLPointCloud::Ptr &pclCloudIn, PCLPointCloud::Ptr &pclCloudOut, Eigen::Matrix4d &transformationMatrix);
+    bool applyICM(PCLPointCloud::Ptr &pclCloudSource, PCLPointCloud::Ptr &pclCloudTarget);
     void callback(const sensor_msgs::PointCloud2ConstPtr &cloud);
 
     private:
