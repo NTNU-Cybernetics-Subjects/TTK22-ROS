@@ -1,4 +1,5 @@
 #include "iterative_closest_point/icp.h"
+#include "ros/time.h"
 
 #include <Eigen/src/Geometry/AngleAxis.h>
 #include <pcl/common/transforms.h>
@@ -59,7 +60,7 @@ PCLPointCloud::Ptr downSample(PCLPointCloud::Ptr &raw_cloud){
 
 	pcl::VoxelGrid<PCLPoint> voxel_filter;
 	voxel_filter.setInputCloud(raw_cloud);
-	voxel_filter.setLeafSize(0.12f, 0.12f, 0.12f);
+	voxel_filter.setLeafSize(0.2f, 0.2f, 0.2f);
 	voxel_filter.filter(*downsampled_cloud);
 
     return downsampled_cloud;
@@ -73,10 +74,16 @@ ICP::ICP(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
 
     // Transformed cloud topic
     this->pub_cloud_transform_ = nh_private_.advertise<sensor_msgs::PointCloud2>("/icp/cloud_transformed", 1);
+
+    // Aligned cloud topic
+    this->pub_cloud_aligned_ = nh_private_.advertise<sensor_msgs::PointCloud2>("/icp/cloud_alinged", 1);
+
     // Original cloud topic, for compering
     this->pub_cloud_original_ = nh_private_.advertise<sensor_msgs::PointCloud2>("/icp/cloud_original", 1);
-    // incoming cloud
-    this->sub_ = nh_private_.subscribe("/os_cloud_node/points", 1, &ICP::callback, this);
+
+    // incoming cloud from the bag
+    std::string lider_data_topic = "/os_cloud_node/points";
+    this->sub_ = nh_private_.subscribe(lider_data_topic, 1, &ICP::callback, this);
 
     ROS_INFO("Initializing ICP node");
 
@@ -85,29 +92,41 @@ ICP::ICP(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
 
 void ICP::callback(const sensor_msgs::PointCloud2ConstPtr &msgCloud){
 
-    // Convert raw cloud to pcl-cloud, and downsample to lower ICP run-time
     PCLPointCloud::Ptr pclCloudOriginal(new PCLPointCloud);
+    PCLPointCloud::Ptr pclCloudTransformed(new PCLPointCloud);
+    PCLPointCloud::Ptr pclCloudAligned(new PCLPointCloud);
+
+    // Convert raw cloud to pcl-cloud, and downsample to lower ICP run-time
     pcl::fromROSMsg(*msgCloud, *pclCloudOriginal);
     pclCloudOriginal = downSample(pclCloudOriginal);
 
     // Transform the cloud to have something to do the ICM on
-    PCLPointCloud::Ptr pclCloudTransformed(new PCLPointCloud);
-    Eigen::Matrix4d transformationMatrix = getFullTransformationMatrix(0, 0, M_PI/4,
+    Eigen::Matrix4d transformationMatrix = getFullTransformationMatrix(0, 0, M_PI/10,
                                                                        0, 0.1, 0);
     ROS_INFO("Transforming the incomming point cloud with the transformation:");
     rosPrintMatrix4dInfo(transformationMatrix);
     pcl::transformPointCloud(*pclCloudOriginal, *pclCloudTransformed, transformationMatrix);
 
-    // Align the point clouds
+    *pclCloudAligned = *pclCloudTransformed;
+    
+    // Align the point cloud with ICP
     ROS_INFO("Applying ICM transformed->original with size = %d", pclCloudOriginal->size());
-    bool ICM_status = this->applyICM(pclCloudTransformed, pclCloudOriginal);
+    bool ICM_status = this->applyICM(pclCloudAligned, pclCloudOriginal);
 
     // Convert transformed point cloud to rosmsg
     sensor_msgs::PointCloud2 msgTransformedCloud;
     pcl::toROSMsg(*pclCloudTransformed, msgTransformedCloud);
+    msgTransformedCloud.header.stamp = ros::Time::now();
 
-    this->pub_cloud_original_.publish(msgCloud); // Publish the original pointcloud at the same time to compare (because of delay)
+    // Convert aligned point cloud to rosmsg
+    sensor_msgs::PointCloud2 msgAlignedCloud;
+    pcl::toROSMsg(*pclCloudAligned, msgAlignedCloud);
+    msgAlignedCloud.header.stamp = ros::Time::now();
+
+    // Publish all clouds at the same time for comparing
+    this->pub_cloud_original_.publish(msgCloud);
     this->pub_cloud_transform_.publish(msgTransformedCloud);
+    this->pub_cloud_aligned_.publish(msgAlignedCloud);
 }
 
 bool ICP::applyICM(PCLPointCloud::Ptr &pclCloudSource, PCLPointCloud::Ptr &pclCloudTarget){
