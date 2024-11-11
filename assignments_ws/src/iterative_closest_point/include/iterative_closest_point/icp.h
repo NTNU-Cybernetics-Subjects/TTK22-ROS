@@ -29,5 +29,12 @@ class ICP {
 };
 
 
+PCLPointCloud::Ptr downSample(PCLPointCloud::Ptr &raw_cloud);
+
+Eigen::Matrix4d getFullTransformationMatrix(double roll, double pitch, double yaw,
+                                        double xTrans, double yTrans, double zTrans);
+
+void rosPrintMatrix4dInfo(Eigen::Matrix4d &matrix);
+
 #endif // !ICP_H
 
