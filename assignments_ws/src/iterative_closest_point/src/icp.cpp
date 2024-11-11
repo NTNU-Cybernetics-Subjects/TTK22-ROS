@@ -1,6 +1,8 @@
 #include "iterative_closest_point/icp.h"
-#include "Eigen/src/Geometry/AngleAxis.h"
-#include "pcl/common/transforms.h"
+
+#include <Eigen/src/Geometry/AngleAxis.h>
+#include <pcl/common/transforms.h>
+#include <pcl/filters/voxel_grid.h>
 #include <Eigen/src/Core/Matrix.h>
 #include <ostream>
 #include <ros/console.h>
@@ -16,6 +18,7 @@
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/console/time.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/filters/voxel_grid.h>
 
 void rosPrintMatrix4dInfo(Eigen::Matrix4d &matrix){
     std::ostringstream oss;
@@ -33,7 +36,7 @@ void rosPrintMatrix4dInfo(Eigen::Matrix4d &matrix){
 }
 
 Eigen::Matrix4d getFullTransformationMatrix(double roll, double pitch, double yaw,
-                                            double xTrans, double yTrans, double zTrans){
+                                        double xTrans, double yTrans, double zTrans){
 
     // Rotation
     Eigen::AngleAxisd zRotation = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
@@ -50,13 +53,29 @@ Eigen::Matrix4d getFullTransformationMatrix(double roll, double pitch, double ya
     return zyxtTransformationMatrix;
 }
 
+PCLPointCloud::Ptr downSample(PCLPointCloud::Ptr &raw_cloud){
+
+    PCLPointCloud::Ptr downsampled_cloud(new PCLPointCloud);
+
+	pcl::VoxelGrid<PCLPoint> voxel_filter;
+	voxel_filter.setInputCloud(raw_cloud);
+	voxel_filter.setLeafSize(0.12f, 0.12f, 0.12f);
+	voxel_filter.filter(*downsampled_cloud);
+
+    return downsampled_cloud;
+
+}
+
 ICP::ICP(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
 
     this->nh_ = nh;
     this->nh_private_ = nh_private;
 
+    // Transformed cloud topic
     this->pub_cloud_transform_ = nh_private_.advertise<sensor_msgs::PointCloud2>("/icp/cloud_transformed", 1);
+    // Original cloud topic, for compering
     this->pub_cloud_original_ = nh_private_.advertise<sensor_msgs::PointCloud2>("/icp/cloud_original", 1);
+    // incoming cloud
     this->sub_ = nh_private_.subscribe("/os_cloud_node/points", 1, &ICP::callback, this);
 
     ROS_INFO("Initializing ICP node");
@@ -66,20 +85,24 @@ ICP::ICP(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
 
 void ICP::callback(const sensor_msgs::PointCloud2ConstPtr &msgCloud){
 
-    // Convert raw cloud to pcl-cloud
+    // Convert raw cloud to pcl-cloud, and downsample to lower ICP run-time
     PCLPointCloud::Ptr pclCloudOriginal(new PCLPointCloud);
     pcl::fromROSMsg(*msgCloud, *pclCloudOriginal);
+    pclCloudOriginal = downSample(pclCloudOriginal);
 
-    // Generate the transformed pcl cloud
+    // Transform the cloud to have something to do the ICM on
     PCLPointCloud::Ptr pclCloudTransformed(new PCLPointCloud);
     Eigen::Matrix4d transformationMatrix = getFullTransformationMatrix(0, 0, M_PI/4,
-                                                                       0, 0.5, 0);
+                                                                       0, 0.1, 0);
+    ROS_INFO("Transforming the incomming point cloud with the transformation:");
+    rosPrintMatrix4dInfo(transformationMatrix);
     pcl::transformPointCloud(*pclCloudOriginal, *pclCloudTransformed, transformationMatrix);
 
-    ROS_INFO("Applying ICM on incomming cloud (size = %d)", pclCloudOriginal->size());
+    // Align the point clouds
+    ROS_INFO("Applying ICM transformed->original with size = %d", pclCloudOriginal->size());
     bool ICM_status = this->applyICM(pclCloudTransformed, pclCloudOriginal);
 
-    // Convert transfomred point cloud to rosmsg
+    // Convert transformed point cloud to rosmsg
     sensor_msgs::PointCloud2 msgTransformedCloud;
     pcl::toROSMsg(*pclCloudTransformed, msgTransformedCloud);
 
@@ -91,18 +114,18 @@ bool ICP::applyICM(PCLPointCloud::Ptr &pclCloudSource, PCLPointCloud::Ptr &pclCl
 
     pcl:pcl::console::TicToc time;
 
-    int iterations = 15;
+    int max_iterations = 25;
 
     time.tic();
     pcl::IterativeClosestPoint<PCLPoint, PCLPoint> icp;
-    icp.setMaximumIterations(iterations);
+    icp.setMaximumIterations(max_iterations);
 
     icp.setInputSource(pclCloudSource);
     icp.setInputTarget(pclCloudTarget);
 
     icp.align(*pclCloudSource);
 
-    ROS_INFO("Applied %d iterations, elapsed time: %.2f", iterations , time.toc());
+    ROS_INFO("Applied %d iterations, elapsed time: %.2f", max_iterations , time.toc());
 
     if (icp.hasConverged()){
         ROS_INFO("ICP converged with score: %.2f", icp.getFitnessScore());
