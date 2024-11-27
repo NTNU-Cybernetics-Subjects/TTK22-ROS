@@ -23,14 +23,24 @@ class ICP_node : public rclcpp::Node {
         sub_raw_cloud_;
 
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr
-        pub_cloud_original;
+        pub_cloud_original_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr
         pub_cloud_transfomred_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr
         pub_algigned_cloud_;
 };
 
+/* Generic z-y-x transformation matrix */
+Eigen::Matrix4d getFullTransformationMatrix(double roll, double pitch,
+                                            double yaw, double xTrans,
+                                            double yTrans, double zTrans);
+/* Print a 4by4 Eigen matrix */
+void rosPrintMatrix4dInfo(Eigen::Matrix4d &matrix);
+
+/* DownSample a pclCloud using voxel filter */
 PCLPointCloud::Ptr downSample(PCLPointCloud::Ptr &raw_cloud);
+
+/* The iterative closest point algorithm */
 bool applyICM(PCLPointCloud::Ptr &pclCloudSource,
               PCLPointCloud::Ptr &pclCloudTarget);
 
