@@ -7,7 +7,7 @@
 // #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/voxel_grid.h>
 
-void rosPrintMatrix4dInfo(Eigen::Matrix4d &matrix){
+std::string Matrix4dToStr(Eigen::Matrix4d &matrix){
     std::ostringstream oss;
     oss << "Transformation matrix: " << std::endl << "| ";
     for (int i = 0; i<4; i++){
@@ -19,6 +19,7 @@ void rosPrintMatrix4dInfo(Eigen::Matrix4d &matrix){
             oss << "|  ";
         }
     }
+    return oss.str();
     // ROS_INFO("%s", oss.str().c_str());
 }
 
@@ -61,12 +62,8 @@ PCLPointCloud::Ptr downSample(PCLPointCloud::Ptr &raw_cloud) {
 bool applyICM(PCLPointCloud::Ptr &pclCloudSource,
               PCLPointCloud::Ptr &pclCloudTarget) {
 
-pcl:
-    pcl::console::TicToc time;
-
     int max_iterations = 25;
 
-    time.tic();
     pcl::IterativeClosestPoint<PCLPoint, PCLPoint> icp;
     icp.setMaximumIterations(max_iterations);
 
@@ -75,14 +72,9 @@ pcl:
 
     icp.align(*pclCloudSource);
 
-    // ROS_INFO("Applied %d iterations, elapsed time: %.2f", max_iterations ,
-    // time.toc());
-
     if (icp.hasConverged()) {
-        // ROS_INFO("ICP converged with score: %.2f", icp.getFitnessScore());
         return 1;
     } else {
-        // ROS_ERROR("ICP did not converged.");
         return 0;
     }
 }

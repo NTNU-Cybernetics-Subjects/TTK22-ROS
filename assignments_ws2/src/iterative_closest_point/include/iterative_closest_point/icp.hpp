@@ -35,7 +35,7 @@ Eigen::Matrix4d getFullTransformationMatrix(double roll, double pitch,
                                             double yaw, double xTrans,
                                             double yTrans, double zTrans);
 /* Print a 4by4 Eigen matrix */
-void rosPrintMatrix4dInfo(Eigen::Matrix4d &matrix);
+std::string Matrix4dToStr(Eigen::Matrix4d &matrix);
 
 /* DownSample a pclCloud using voxel filter */
 PCLPointCloud::Ptr downSample(PCLPointCloud::Ptr &raw_cloud);
