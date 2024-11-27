@@ -2,14 +2,41 @@ cmake_minimum_required(VERSION 3.8)
 project(iterative_closest_point)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(-Wall -Wextra -Wpedantic, -w)
 endif()
 
-# find dependencies
+set(CMAKE_CXX_STANDARD 14)
+
+# Find ros dependencies
 find_package(ament_cmake REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
 find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(pcl_conversions REQUIRED)
+
+# Find other dependencies
+find_package(PCL REQUIRED)
+
+include_directories(
+    include
+    ${PCL_INCLUDE_DIRS}
+)
+
+# add_definitions(
+#     ${PCL_DEFINITIONS}
+# )
+
+add_executable(icp_node src/icp_node.cpp src/icp.cpp)
+
+# target_link_libraries(
+#     icp_node
+#     ${PCL_LIBRARIES}
+# )
+
+install(TARGETS
+    icp_node
+    DESTINATION lib/${PROJECT_NAME}
+)
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -22,5 +49,12 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+ament_target_dependencies(
+    icp_node
+    rclcpp
+    sensor_msgs
+    pcl_conversions
+)
 
 ament_package()
