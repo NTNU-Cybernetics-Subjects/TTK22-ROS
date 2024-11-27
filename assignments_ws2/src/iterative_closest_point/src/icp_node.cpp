@@ -2,30 +2,42 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
-// #include <functional>
-// #include <memory>
+#include <rclcpp/utilities.hpp>
+
 #include <pcl/common/transforms.h>
 #include <pcl/conversions.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <rclcpp/utilities.hpp>
+
+#include <string>
+
+// #include <functional>
+// #include <memory>
 
 ICP_node::ICP_node() : Node("icp_node") {
 
-    this->sub_raw_cloud_ =
-        this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/os_cloud_node/points", 1,
-            std::bind(&ICP_node::raw_cloud_callback, this,
-                      std::placeholders::_1));
+    // Add cloud topic as a paramter to enable easy switching at runtime
+    std::string default_cloud_topic = "/os_cloud_node/points";
+    this->declare_parameter("cloud_topic", default_cloud_topic);
+    std::string cloud_topic = this->get_parameter("cloud_topic").as_string();
 
-    this->pub_cloud_original_ =
-        this->create_publisher<sensor_msgs::msg::PointCloud2>(
-            "icp/original_cloud", 1);
-    this->pub_cloud_transfomred_ =
+    // Subscribe to the spesificed point cloud
+    sub_raw_cloud_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+        cloud_topic, 1,
+        std::bind(&ICP_node::raw_cloud_callback, this, std::placeholders::_1));
+
+    RCLCPP_INFO(this->get_logger(),
+                "Subscribed to cloud_topic: %s, to use another topic use the "
+                "argument: '--ros-args -p cloud_topic:=/another/topic'",
+                cloud_topic.c_str());
+
+    pub_cloud_original_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+        "icp/original_cloud", 1);
+    pub_cloud_transfomred_ =
         this->create_publisher<sensor_msgs::msg::PointCloud2>(
             "icp/transformed_cloud", 1);
-    this->pub_algigned_cloud_ =
-        this->create_publisher<sensor_msgs::msg::PointCloud2>(
-            "icp/algined_cloud", 1);
+    pub_algigned_cloud_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+        "icp/algined_cloud", 1);
+    RCLCPP_INFO(this->get_logger(), "Node intialized sucessfully.");
 }
 
 void ICP_node::raw_cloud_callback(
@@ -42,10 +54,13 @@ void ICP_node::raw_cloud_callback(
     // Transform the cloud to have something to do the ICM on
     Eigen::Matrix4d transformationMatrix =
         getFullTransformationMatrix(0, 0, M_PI / 10, 0, 0.1, 0);
+
+    std::string matrixPrint = Matrix4dToStr(transformationMatrix);
     RCLCPP_INFO(
         this->get_logger(),
-        "Transforming the incomming point cloud with the transformation:");
-    rosPrintMatrix4dInfo(transformationMatrix);
+        "Transforming the incomming point cloud with the transformation:\n%s",
+        matrixPrint.c_str());
+
     pcl::transformPointCloud(*pclCloudOriginal, *pclCloudTransformed,
                              transformationMatrix);
 
@@ -53,29 +68,26 @@ void ICP_node::raw_cloud_callback(
 
     // Align the point cloud with ICP
     RCLCPP_INFO(this->get_logger(),
-                "Applying ICM transformed->original with size = %d",
+                "Applying ICM transformed->original (%d points)",
                 pclCloudOriginal->size());
+
     bool ICM_status = applyICM(pclCloudAligned, pclCloudOriginal);
+    if (ICM_status){
+        RCLCPP_INFO(this->get_logger(), "Cloud converged.");
+    } else {
+        RCLCPP_INFO(this->get_logger(), "Cloud did not converge.");
+    }
 
     // Convert transformed point cloud to rosmsg
     sensor_msgs::msg::PointCloud2 transformed_cloud_msg;
     pcl::toROSMsg(*pclCloudTransformed, transformed_cloud_msg);
-    // msgTransformedCloud.header.stamp = ros::Time::now();
 
     // Convert aligned point cloud to rosmsg
     sensor_msgs::msg::PointCloud2 aligned_cloud_msg;
     pcl::toROSMsg(*pclCloudAligned, aligned_cloud_msg);
-    // msgAlignedCloud.header.stamp = ros::Time::now();
 
     // Publish all clouds at the same time for comparing
     this->pub_cloud_original_->publish(*raw_cloud_msg);
     this->pub_cloud_transfomred_->publish(transformed_cloud_msg);
     this->pub_algigned_cloud_->publish(aligned_cloud_msg);
-}
-
-int main(int argc, char *argv[]) {
-    rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<ICP_node>());
-    rclcpp::shutdown();
-    return 0;
 }
