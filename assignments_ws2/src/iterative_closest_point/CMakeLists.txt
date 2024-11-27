@@ -25,7 +25,7 @@ include_directories(
 #     ${PCL_DEFINITIONS}
 # )
 
-add_executable(icp_node src/icp_node.cpp src/icp.cpp)
+add_executable(icp_node src/main.cpp src/icp_node.cpp src/icp.cpp)
 
 # target_link_libraries(
 #     icp_node
