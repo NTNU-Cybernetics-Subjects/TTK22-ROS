@@ -64,7 +64,6 @@ PCLPointCloud::Ptr downSample(PCLPointCloud::Ptr &raw_cloud){
 	voxel_filter.filter(*downsampled_cloud);
 
     return downsampled_cloud;
-
 }
 
 ICP::ICP(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
@@ -131,7 +130,7 @@ void ICP::callback(const sensor_msgs::PointCloud2ConstPtr &msgCloud){
 
 bool ICP::applyICM(PCLPointCloud::Ptr &pclCloudSource, PCLPointCloud::Ptr &pclCloudTarget){
 
-    pcl:pcl::console::TicToc time;
+    pcl::console::TicToc time;
 
     int max_iterations = 25;
 
